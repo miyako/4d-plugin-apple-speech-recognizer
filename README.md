@@ -13,7 +13,7 @@
 
 ### Releases
 
-[1.0](https://github.com/miyako/4d-plugin-apple-speech-recognizer/releases/tag/1.0)
+[1.1](https://github.com/miyako/4d-plugin-apple-speech-recognizer/releases/tag/1.1)
 
 ---
 
