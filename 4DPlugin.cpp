@@ -9,6 +9,7 @@
  # --------------------------------------------------------------------------------*/
 
 
+#include <cstdio>
 #include "4DPluginAPI.h"
 #include "4DPlugin.h"
 
@@ -36,7 +37,9 @@ namespace SR
 	
 	process_number_t METHOD_PROCESS_ID = 0;
 	process_stack_size_t STACK_SIZE = 512*1024;
-	process_name_t PROCESS_NAME = (PA_Unichar *)"$\0S\0P\0E\0E\0C\0H\0_\0R\0E\0C\0O\0G\0N\0I\0Z\0E\0R\0\0\0";
+	/* was a hand-built interleaved-null "$\0S\0P\0..." literal encoding "$SPEECH_RECOGNIZER" as UTF-16;
+	   replaced with a compiler-verified u16 literal so a future edit can't silently miscount nulls */
+	process_name_t PROCESS_NAME = (PA_Unichar *)u"$SPEECH_RECOGNIZER";
 
 	C_TEXT LISTENER_METHOD;
 	C_TEXT LISTENER_TITLE;
@@ -142,7 +145,11 @@ void PluginMain(PA_long32 selector, PA_PluginParameters params)
 	}
 	catch(...)
 	{
-
+		/* None of this plugin's commands declare a return value (see manifest.json - no
+		   trailing :Type on any syntax string), so swallowing here cannot leave the host
+		   waiting on a PA_Return* call - it can only hide a real bug silently. Log to stderr
+		   so a crash/exception is at least visible during development. */
+		fprintf(stderr, "[NSSpeechRecognizer plugin] exception caught in PluginMain (selector %ld)\n", (long)selector);
 	}
 }
 
@@ -173,6 +180,8 @@ void listenerLoop()
 	}
 	
 	[SR::listener end];
+	[SR::listener release]; /* SR::listener was alloc'd in this same function and never released;
+	                            `end` only tears down the internal NSSpeechRecognizer, not self */
 	SR::listener = nil;
 	
 	SR::METHOD_PROCESS_ID = 0;
@@ -225,9 +234,9 @@ void listenerLoopExecuteMethod()
 		PA_Unistring command = PA_CreateUnistring((PA_Unichar *)cc->c_str());
 		PA_SetStringVariable(&params[0], &command);
 
-		/* execute method */
-		SR::RECOGNIZED_COMMANDS.erase(cc);
+		/* execute method - erase after use, consistent with the else-branch below */
 		PA_ExecuteMethodByID(methodId, params, 1);
+		SR::RECOGNIZED_COMMANDS.erase(cc);
 		PA_ClearVariable(&params[0]);
 	}else{
 		
@@ -257,7 +266,9 @@ bool IsProcessOnExit()
 	PA_long32 state, time;
 	PA_GetProcessInfo(PA_GetCurrentProcessNumber(), name, &state, &time);
 	CUTF16String procName(name.getUTF16StringPtr());
-	CUTF16String exitProcName((PA_Unichar *)"$\0x\0x\0\0\0");
+	/* was a hand-built interleaved-null "$\0x\0x\0\0\0" literal encoding "$xx" as UTF-16;
+	   replaced with a compiler-verified u16 literal, see PROCESS_NAME above for the same fix */
+	CUTF16String exitProcName((const PA_Unichar *)u"$xx");
 	return (!procName.compare(exitProcName));
 }
 
@@ -372,7 +383,6 @@ void json_wconv(const wchar_t *value, CUTF16String *u16)
 
 void START_SPEECH_RECOGNIZER(sLONG_PTR *pResult, PackagePtr pParams)
 {
-	C_TEXT Param1_method;
 	C_TEXT Param2_options;
 
 	SR::LISTENER_METHOD.fromParamAtIndex(pParams, 1);
@@ -440,8 +450,6 @@ void START_SPEECH_RECOGNIZER(sLONG_PTR *pResult, PackagePtr pParams)
 
 void SET_SPEECH_COMMANDS(sLONG_PTR *pResult, PackagePtr pParams)
 {
-	ARRAY_TEXT Param1;
-
 	SR::LISTENER_COMMANDS.fromParamAtIndex(pParams, 1);
 	
 	if(SR::listener)
@@ -452,8 +460,6 @@ void SET_SPEECH_COMMANDS(sLONG_PTR *pResult, PackagePtr pParams)
 
 void GET_SPEECH_COMMANDS(sLONG_PTR *pResult, PackagePtr pParams)
 {
-	ARRAY_TEXT Param1;
-
 	SR::LISTENER_COMMANDS.toParamAtIndex(pParams, 1);
 }
 
