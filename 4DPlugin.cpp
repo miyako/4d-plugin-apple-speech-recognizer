@@ -10,6 +10,8 @@
 
 
 #include <cstdio>
+#include <cstring>
+#include <memory>
 #include "4DPluginAPI.h"
 #include "4DPlugin.h"
 
@@ -326,59 +328,6 @@ void CommandDispatcher (PA_long32 pProcNum, sLONG_PTR *pResult, PackagePtr pPara
 
 // ------------------------------ NSSpeechRecognizer ------------------------------
 
-#pragma mark JSON
-
-void json_wconv(const char *value, std::wstring &u32)
-{
-	if((value) && strlen(value))
-	{
-		C_TEXT t;
-		CUTF8String u8 = CUTF8String((const uint8_t *)value);
-		
-		t.setUTF8String(&u8);
-		
-#if VERSIONWIN
-		u32 = std::wstring((wchar_t *)t.getUTF16StringPtr());
-#else
-		uint32_t dataSize = (t.getUTF16Length() * sizeof(wchar_t))+ sizeof(wchar_t);
-		std::vector<char> buf(dataSize);
-		
-		PA_ConvertCharsetToCharset((char *)t.getUTF16StringPtr(),
-															 t.getUTF16Length() * sizeof(PA_Unichar),
-															 eVTC_UTF_16,
-															 (char *)&buf[0],
-															 dataSize,
-															 eVTC_UTF_32);
-		
-		u32 = std::wstring((wchar_t *)&buf[0]);
-#endif
-	}else
-	{
-		u32 = L"";
-	}
-	
-}
-
-void json_wconv(const wchar_t *value, CUTF16String *u16)
-{
-	size_t wlen = wcslen(value);
-	
-#if VERSIONWIN
-	*u16 = CUTF16String((const PA_Unichar *)value, wlen);
-#else
-	uint32_t dataSize = (uint32_t)((wlen * sizeof(wchar_t))+ sizeof(PA_Unichar));
-	std::vector<char> buf(dataSize);
-	//returns byte size in toString (in this case, need to /2 to get characters)
-	uint32_t len = PA_ConvertCharsetToCharset((char *)value,
-																						(PA_long32)(wlen * sizeof(wchar_t)),
-																						eVTC_UTF_32,
-																						(char *)&buf[0],
-																						dataSize,
-																						eVTC_UTF_16);
-	*u16 = CUTF16String((const PA_Unichar *)&buf[0], len/sizeof(PA_Unichar));
-#endif
-}
-
 #pragma mark -
 
 void START_SPEECH_RECOGNIZER(sLONG_PTR *pResult, PackagePtr pParams)
@@ -390,54 +339,32 @@ void START_SPEECH_RECOGNIZER(sLONG_PTR *pResult, PackagePtr pParams)
 	
 	CUTF8String _Param2_options;
 	Param2_options.copyUTF8String(&_Param2_options);
-	std::wstring __Param2_options;
-	json_wconv((const char *)_Param2_options.c_str(), __Param2_options);
-	JSONNODE *option = json_parse(__Param2_options.c_str());
 
-	if(option)
+	const char *jsonBegin = (const char *)_Param2_options.c_str();
+	const char *jsonEnd = jsonBegin + strlen(jsonBegin);
+
+	Json::CharReaderBuilder builder;
+	std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+	Json::Value option;
+	std::string errs;
+
+	if(reader->parse(jsonBegin, jsonEnd, &option, &errs) && option.isObject())
 	{
-		if (json_type(option) == JSON_NODE)
+		if(option.isMember("displayedCommandsTitle") && option["displayedCommandsTitle"].isString())
 		{
-			JSONNODE_ITERATOR i = json_begin(option);
-			while (i != json_end(option))
-			{
-				JSONNODE *n = *i;
-				if(n)
-				{
-					json_char *name = json_name(n);
-					if(name)
-					{
-						std::wstring s = std::wstring((const wchar_t *)name);
-						if (s.compare(L"displayedCommandsTitle") == 0)
-						{
-							json_char *value = json_as_string(n);
-							if(value)
-							{
-								CUTF16String u16;
-								json_wconv(value, &u16);
-								SR::LISTENER_TITLE.setUTF16String(&u16);
-								json_free(value);
-							}
-							goto __exit;
-						}
-						if (s.compare(L"listensInForegroundOnly") == 0)
-						{
-							SR::listensInForegroundOnly = json_as_bool(n);
-							goto __exit;
-						}
-						if (s.compare(L"blocksOtherRecognizers") == 0)
-						{
-							SR::blocksOtherRecognizers = json_as_bool(n);
-							goto __exit;
-						}
-						__exit:
-						json_free(name);
-					}
-				}
-				++i;
-			}
+			std::string title = option["displayedCommandsTitle"].asString();
+			SR::LISTENER_TITLE.setUTF8String((const uint8_t *)title.c_str(), (uint32_t)title.length());
 		}
-		json_delete(option);
+
+		if(option.isMember("listensInForegroundOnly") && option["listensInForegroundOnly"].isBool())
+		{
+			SR::listensInForegroundOnly = option["listensInForegroundOnly"].asBool();
+		}
+
+		if(option.isMember("blocksOtherRecognizers") && option["blocksOtherRecognizers"].isBool())
+		{
+			SR::blocksOtherRecognizers = option["blocksOtherRecognizers"].asBool();
+		}
 	}
 
 	listenerLoopStart();

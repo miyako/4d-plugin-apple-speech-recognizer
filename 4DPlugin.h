@@ -8,7 +8,7 @@
  #
  # --------------------------------------------------------------------------------*/
 
-#include "libjson.h"
+#include <json/json.h>
 
 // --- NSSpeechRecognizer
 void START_SPEECH_RECOGNIZER(sLONG_PTR *pResult, PackagePtr pParams);
