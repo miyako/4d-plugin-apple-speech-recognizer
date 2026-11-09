@@ -12,6 +12,77 @@ Drives Apple's `NSSpeechRecognizer` — the older, lightweight command-and-contr
 
 **Platforms:** macOS only (Carbon-hosted and Cocoa-hosted 4D). `NSSpeechRecognizer` is an AppKit API with no Windows equivalent; there is no Windows implementation of these commands.
 
+## Manual versioning and publication
+
+**Bump version** and **Build** are independent manual Actions. Select the intended
+branch in the Actions branch selector; publication is not restricted to `master`.
+Both check out the immutable dispatch `github.sha`. Neither runs on pushes, tags,
+or pull requests.
+
+**Bump version** accepts `patch`, `minor`, or `major`. It validates source metadata,
+co-bumps literal versions, and pushes exactly one direct-child commit to the
+explicitly selected branch. A clean checkout, unchanged remote branch, and the
+executable `.github/scripts/bump-hooks/pre-push` guard are mandatory. The guard
+also checks Git's advertised OLD SHA, literal NEW SHA/HEAD, single direct parent,
+exact target and exactly one update, rejecting even late rewinds, deletions and
+same-result races. The non-force push disables following tags. It creates no tag
+and dispatches no build. If the branch moves, inspect it and dispatch again.
+
+The source authority is one strict `X.Y.Z` in all six `MARKETING_VERSION`
+assignments in `NSSpeechRecognizer.xcodeproj/project.pbxproj`, coordinated with
+all six `CURRENT_PROJECT_VERSION` assignments, source `Info.plist`, and
+`English.lproj/InfoPlist.strings` (including the copyright version text).
+Supported Xcode references remain references; absent optional `CFBundleVersion`
+stays absent. Edits preserve BOM, individual line endings (including CR-only or
+mixed), file mode and unrelated bytes. Prebuilt bundle metadata/binaries,
+dependencies, 4D data/counters, schemas and resources are not version authority.
+The migration retains `1.0.5`: it repairs only stale `CURRENT_PROJECT_VERSION`
+`1.0.3` and localized `1.0` to that existing marketing/plist authority, honoring
+the original Bump header's coordinated-version contract.
+
+**Build** has zero inputs. It derives `vX.Y.Z`, `NSSpeechRecognizer-X.Y.Z.zip`,
+and `NSSpeechRecognizer-X.Y.Z.dmg` from validated source at the selected SHA.
+A repository-wide constant concurrency group serializes publication across
+branches without cancelling a running build. Early and final checks require the
+tag to be absent remotely and no matching draft or published release on any
+authenticated, validated release-list page. HTTP/auth/network/malformed responses
+fail closed, including 404 and later-page failures.
+
+The existing macOS runner, universal architectures, Default configuration,
+deployment override `11.0`, frameworks, resources, signing/notary secret names,
+bundle destination and zip/dmg shapes are preserved. Fresh macOS output is
+required at `NSSpeechRecognizer.4dbase/Plugins/NSSpeechRecognizer.bundle`:
+only stale `Contents/MacOS` and `Plugins/Default` output are removed, and
+`CONFIGURATION_BUILD_DIR` points to the expected Plugins destination rather
+than Xcode's otherwise nested Default directory. Each architecture check is a
+separate failing gate. Committed documentation, QuickLook and legacy Windows
+files remain in the bundle; no Windows build is invented. Existing legacy API,
+SDK, minimum-OS and dependency compatibility caveats remain; this migration does
+not claim a native build or compatibility certification.
+
+After universal verification, signing and strict signature verification, both
+notarizations and DMG stapling succeed, publication checks availability again.
+It POSTs a new tag ref at exactly the selected SHA, verifies it remotely, then
+separately POSTs a published, non-prerelease release with the original empty
+notes and uploads assets only to the newly returned release ID. It never
+reuses, updates, deletes, clobbers, retries or rolls back remote state.
+
+**Manual recovery:** any failure after mutation retains the tag, release and
+already uploaded assets. Inspect the Actions log, exact tag SHA, draft/published
+release and asset state before deciding how to recover manually. Do not blindly
+rerun Build: an existing tag or release is intentionally rejected, even at the
+same SHA. Resolve retained state deliberately under repository policy, or bump
+source and publish a new version. A failed branch post-push verification also
+requires inspection; the source commit may already be remote.
+
+Local validation (no native/signing/4D execution or GitHub publication):
+`actionlint` and
+`PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/tests -v`.
+The suites exercise real isolated bare-Git races, source byte/mode preservation,
+excluded files, paginated API failures, retained publication state and native
+gate wiring. Tests derive live versions or use stable independent fixtures, so
+the full suites can also run after a temporary-copy bump.
+
 ---
 
 ## Requirements & platform notes
