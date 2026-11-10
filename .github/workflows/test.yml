@@ -12,6 +12,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Python tests and actual-source SDK ownership sanitizers
         env:
           PYTHONDONTWRITEBYTECODE: '1'
