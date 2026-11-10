@@ -75,13 +75,60 @@ same SHA. Resolve retained state deliberately under repository policy, or bump
 source and publish a new version. A failed branch post-push verification also
 requires inspection; the source commit may already be remote.
 
-Local validation (no native/signing/4D execution or GitHub publication):
+Local validation (no signing, 4D-host execution or GitHub publication):
 `actionlint` and
 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/tests -v`.
-The suites exercise real isolated bare-Git races, source byte/mode preservation,
-excluded files, paginated API failures, retained publication state and native
-gate wiring. Tests derive live versions or use stable independent fixtures, so
-the full suites can also run after a temporary-copy bump.
+The lifecycle/version suites exercise real isolated bare-Git races, source
+byte/mode preservation, excluded files, paginated API failures, retained
+publication state and native gate wiring. Tests derive live versions or use
+stable independent fixtures, so those suites can also run after a temporary-copy bump.
+
+### String ownership regression
+
+On macOS, the test suite compiles the bundled SDK, first-party string/array/picture
+helpers, and the actual `listenerLoopExecuteMethod` body against a tracking engine
+shim with AddressSanitizer and UndefinedBehaviorSanitizer. The automatic **Tests**
+workflow runs this suite without signing, packaging, versioning or publication.
+`PYTHONDONTWRITEBYTECODE=1 python3 .github/tests/test_string_ownership.py` runs only
+the ownership regression. Other platforms skip that native test.
+
+The ownership audit baseline is `13c7fe83f6e13eca7301d5c83747da247eab0d18`.
+The bundled SDK implementation says rev v14, while its header says rev v13; these
+labels do not certify a particular upstream SDK release. Both source and bundled
+resource manifests map selectors 1–5 to START (`&T;&T`), SET (`&Y`), GET (`&Y`),
+STOP and QUIT respectively; none declares a function result. SET copies borrowed
+array contents into C++ strings, and GET creates independent strings transferred
+to accepted array slots, without disposing transferred aliases. Scalar `C_TEXT`
+output uses the engine-backed content setter, not array-style struct transfer.
+This SDK has no `PA_GetObjectProperty` surface or first-party JSON-variable wrapper.
+
+Speech recognition queues independent C++ strings asynchronously; SDK callback
+arguments are created only when the listener dispatches synchronously through
+`PA_ExecuteMethodByID` or command 1007. Arguments now update their existing owned
+empty descriptors rather than overwriting them, and both arguments and unused
+returned variables are cleared after dispatch. The SDK returns the method's
+result descriptor before disposing its temporary parameter handle; command
+execution similarly returns its separate result slot. No returned value is
+handed onward by this plugin. The dormant, compiled `CPicture` helper also avoids
+an overwritten empty descriptor and double-dispose in `fromFileAtPath`; `createCopy`
+uses the conversion API's byte count divided by `sizeof(PA_Unichar)`.
+
+The shim covers allocated and null empty strings, exact ASCII/BMP/surrogate-pair
+and empty content, undefined/text/copy-of-input callback results, repeated array
+replacement and allocator churn, borrowed-input independence, shrink/clear,
+rejected setters, picture paths and conversion formats. It tracks SDK string
+allocations explicitly (ASan leak detection is disabled for macOS); picture
+payloads are modeled as null and it does not certify picture reference counting.
+To run the same regression against the original callback and picture sources,
+set `OWNERSHIP_SOURCE_REVISION=13c7fe83f6e13eca7301d5c83747da247eab0d18`:
+the baseline fails on callback leaks, a picture-path double-dispose, and an ASan
+buffer over-read in picture format conversion. This is not a real 4D-host speech
+test or an asynchronous shutdown/reentrancy certification. The retained queue
+iterator across callbacks and QUIT's queue clear remain a deferred lifecycle
+investigation, tracked separately in [issue #3](https://github.com/miyako/4d-plugin-apple-speech-recognizer/issues/3).
+The dormant `C_POINTER::getVariable` getter's cleanup/reference-metadata contract
+is also deferred, not certified safe or changed by this fix; see
+[issue #4](https://github.com/miyako/4d-plugin-apple-speech-recognizer/issues/4).
 
 ---
 

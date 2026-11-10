@@ -233,28 +233,27 @@ void listenerLoopExecuteMethod()
 		/* param1 */
 		PA_Variable	params[1];
 		params[0] = PA_CreateVariable(eVK_Unistring);
-		PA_Unistring command = PA_CreateUnistring((PA_Unichar *)cc->c_str());
-		PA_SetStringVariable(&params[0], &command);
+		PA_SetUnistring(&params[0].uValue.fString, (PA_Unichar *)cc->c_str());
 
 		/* execute method - erase after use, consistent with the else-branch below */
-		PA_ExecuteMethodByID(methodId, params, 1);
+		PA_Variable result = PA_ExecuteMethodByID(methodId, params, 1);
 		SR::RECOGNIZED_COMMANDS.erase(cc);
+		PA_ClearVariable(&result);
 		PA_ClearVariable(&params[0]);
 	}else{
 		
 		/* param1 */
 		PA_Variable	params[2];
 		params[1] = PA_CreateVariable(eVK_Unistring);
-		PA_Unistring command = PA_CreateUnistring((PA_Unichar *)cc->c_str());
-		PA_SetStringVariable(&params[1], &command);
+		PA_SetUnistring(&params[1].uValue.fString, (PA_Unichar *)cc->c_str());
 		
 		params[0] = PA_CreateVariable(eVK_Unistring);
-		PA_Unistring method = PA_CreateUnistring((PA_Unichar *)SR::LISTENER_METHOD.getUTF16StringPtr());
-		PA_SetStringVariable(&params[0], &method);
+		PA_SetUnistring(&params[0].uValue.fString, (PA_Unichar *)SR::LISTENER_METHOD.getUTF16StringPtr());
 
 		/* execute method */
-		PA_ExecuteCommandByID(1007, params, 2);
+		PA_Variable result = PA_ExecuteCommandByID(1007, params, 2);
 		SR::RECOGNIZED_COMMANDS.erase(cc);
+		PA_ClearVariable(&result);
 		PA_ClearVariable(&params[0]);
 		PA_ClearVariable(&params[1]);
 	}
